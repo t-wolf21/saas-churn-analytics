@@ -1,9 +1,10 @@
 from pathlib import Path
+
 import pandas as pd
 
-
-RAW_DATA_DIR = Path("data/raw")
-SAMPLE_DATA_DIR = Path("data/sample")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+RAW_DATA_DIR = PROJECT_ROOT / "data" / "raw"
+SAMPLE_DATA_DIR = PROJECT_ROOT / "data" / "sample"
 
 
 def load_csv(file_name: str, sample: bool = False) -> pd.DataFrame:
@@ -15,14 +16,22 @@ def load_csv(file_name: str, sample: bool = False) -> pd.DataFrame:
 
     return pd.read_csv(path)
 
+
 def load_accounts() -> pd.DataFrame:
     return load_csv("ravenstack_accounts.csv")
+
 
 def load_subscriptions() -> pd.DataFrame:
     return load_csv("ravenstack_subscriptions.csv")
 
+
 def load_feature_usage() -> pd.DataFrame:
     return load_csv("ravenstack_feature_usage.csv")
 
+
 def load_support_tickets() -> pd.DataFrame:
     return load_csv("ravenstack_support_tickets.csv")
+
+
+def load_churn_events() -> pd.DataFrame:
+    return load_csv("ravenstack_churn_events.csv")
