@@ -4,7 +4,8 @@ import subprocess
 
 DATASET = "rivalytics/saas-subscription-and-churn-analytics-dataset"
 
-RAW_DATA_DIR = Path("data/raw")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RAW_DATA_DIR = PROJECT_ROOT / "data" / "raw"
 ZIP_PATH = RAW_DATA_DIR / "saas-subscription-and-churn-analytics-dataset.zip"
 
 def main() -> None:
