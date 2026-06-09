@@ -309,4 +309,24 @@ def build_account_level_features(
     for column in flag_columns:
         account_level_features[column] = account_level_features[column].astype("boolean").fillna(False).astype(bool)
 
+    account_level_features["tickets_per_month"] = (
+            account_level_features["ticket_count"]
+            / ((account_level_features["account_age_days"] / 30.44).clip(lower=1))
+    )
+
+    account_level_features["usage_per_day"] = (
+            account_level_features["total_usage_count"]
+            / account_level_features["account_age_days"].clip(lower=1)
+    )
+
+    account_level_features["error_rate"] = (
+            account_level_features["total_error_count"]
+            / account_level_features["total_usage_count"].clip(lower=1)
+    )
+
+    account_level_features["account_activity_score"] = (
+            account_level_features["usage_per_day"]
+            * account_level_features["unique_features_used"]
+    )
+
     return account_level_features

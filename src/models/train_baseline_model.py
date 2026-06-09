@@ -31,7 +31,7 @@ TARGET_COLUMN = "churn_flag"
 RANDOM_STATE = 42
 VALIDATION_SIZE = 0.2
 TEST_SIZE = 0.2
-THRESHOLDS = (0.3, 0.4, 0.5)
+FIXED_THRESHOLD = 0.35 # Selected on validation set
 
 
 def load_training_data() -> pd.DataFrame:
@@ -162,17 +162,6 @@ def build_logistic_regression_model(X: pd.DataFrame) -> Pipeline:
     )
 
 
-def select_best_threshold(validation_metrics: dict[float, dict[str, object]]) -> float:
-    return max(
-        validation_metrics,
-        key=lambda threshold: (
-            float(validation_metrics[threshold]["f1"]),
-            float(validation_metrics[threshold]["recall"]),
-            float(validation_metrics[threshold]["precision"]),
-        ),
-    )
-
-
 def main() -> None:
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -189,34 +178,30 @@ def main() -> None:
     for model_name, model in models.items():
         model.fit(X_train, y_train)
 
-        validation_metrics: dict[float, dict[str, object]] = {}
-        for threshold in THRESHOLDS:
-            validation_metrics[threshold] = evaluate_binary_classifier(
-                model=model,
-                X_test=X_val,
-                y_test=y_val,
-                model_name=f"{model_name} validation threshold={threshold:.2f}",
-                threshold=threshold,
-            )
-
-        best_threshold = select_best_threshold(validation_metrics)
-        print(
-            f"{model_name} selected validation threshold: {best_threshold:.2f} "
-            f"(F1={validation_metrics[best_threshold]['f1']:.3f})"
+        validation_metrics = evaluate_binary_classifier(
+            model=model,
+            X_test=X_val,
+            y_test=y_val,
+            model_name=f"{model_name} validation threshold={FIXED_THRESHOLD:.2f}",
+            threshold=FIXED_THRESHOLD,
         )
+
+        X_train_full = pd.concat([X_train, X_val], axis=0)
+        y_train_full = pd.concat([y_train, y_val], axis=0)
+        model.fit(X_train_full, y_train_full)
 
         test_metrics = evaluate_binary_classifier(
             model=model,
             X_test=X_test,
             y_test=y_test,
-            model_name=f"{model_name} test threshold={best_threshold:.2f}",
-            threshold=best_threshold,
+            model_name=f"{model_name} test threshold={FIXED_THRESHOLD:.2f}",
+            threshold=FIXED_THRESHOLD,
         )
 
         joblib.dump(
             {
                 "model": model,
-                "threshold": best_threshold,
+                "threshold": FIXED_THRESHOLD,
                 "validation_metrics": validation_metrics,
                 "test_metrics": test_metrics,
             },

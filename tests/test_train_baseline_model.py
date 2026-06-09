@@ -30,6 +30,10 @@ def test_split_features_and_target_drops_metadata_columns_and_returns_int_target
     )
 
 
+def test_fixed_threshold_is_default_value():
+    assert tbm.FIXED_THRESHOLD == 0.35
+
+
 def test_split_train_validation_test_creates_expected_partition_sizes():
     X = pd.DataFrame({"feature": range(10)})
     y = pd.Series([0, 1] * 5, name="churn_flag")
@@ -98,7 +102,7 @@ def test_evaluate_binary_classifier_returns_structured_metrics(capsys):
     assert metrics["classification_report"]["accuracy"] == 1.0
 
 
-def test_main_selects_threshold_on_validation_and_saves_artifacts(monkeypatch):
+def test_main_uses_validation_split_and_saves_artifacts(monkeypatch):
     training_df = pd.DataFrame(
         {
             "account_id": list(range(10)),
@@ -141,11 +145,7 @@ def test_main_selects_threshold_on_validation_and_saves_artifacts(monkeypatch):
         return model
 
     def fake_evaluate_binary_classifier(model, X_test, y_test, model_name, threshold):
-        validation_scores = {
-            "Logistic Regression": {0.3: 0.20, 0.4: 0.80, 0.5: 0.50},
-            "Random Forest": {0.3: 0.60, 0.4: 0.40, 0.5: 0.90},
-        }
-        score = validation_scores[model.name][threshold] if "validation" in model_name else 0.01
+        score = 0.80 if "validation" in model_name else 0.90
         metrics = {
             "threshold": threshold,
             "accuracy": score,
@@ -168,10 +168,20 @@ def test_main_selects_threshold_on_validation_and_saves_artifacts(monkeypatch):
         )
         return metrics
 
+    def fake_split_train_validation_test(X, y):
+        X_train = pd.DataFrame({"feature": [1, 2, 3, 4, 5, 6]})
+        X_val = pd.DataFrame({"feature": [7, 8]})
+        X_test = pd.DataFrame({"feature": [9, 10]})
+        y_train = pd.Series([0, 1, 0, 1, 0, 1], name="churn_flag")
+        y_val = pd.Series([0, 1], name="churn_flag")
+        y_test = pd.Series([0, 1], name="churn_flag")
+        return X_train, X_val, X_test, y_train, y_val, y_test
+
     def fake_joblib_dump(obj, path):
         dump_calls.append((obj, path))
 
     monkeypatch.setattr(tbm, "load_training_data", fake_load_training_data)
+    monkeypatch.setattr(tbm, "split_train_validation_test", fake_split_train_validation_test)
     monkeypatch.setattr(tbm, "build_logistic_regression_model", fake_build_logistic_regression_model)
     monkeypatch.setattr(tbm, "build_random_forest_model", fake_build_random_forest_model)
     monkeypatch.setattr(tbm, "evaluate_binary_classifier", fake_evaluate_binary_classifier)
@@ -179,26 +189,21 @@ def test_main_selects_threshold_on_validation_and_saves_artifacts(monkeypatch):
 
     tbm.main()
 
-    assert [model.fit_calls for model in built_models] == [1, 1]
+    assert [model.fit_calls for model in built_models] == [2, 2]
     assert [call["model_name"] for call in evaluation_calls] == [
-        "Logistic Regression validation threshold=0.30",
-        "Logistic Regression validation threshold=0.40",
-        "Logistic Regression validation threshold=0.50",
-        "Logistic Regression test threshold=0.40",
-        "Random Forest validation threshold=0.30",
-        "Random Forest validation threshold=0.40",
-        "Random Forest validation threshold=0.50",
-        "Random Forest test threshold=0.50",
+        "Logistic Regression validation threshold=0.35",
+        "Logistic Regression test threshold=0.35",
+        "Random Forest validation threshold=0.35",
+        "Random Forest test threshold=0.35",
     ]
-    assert [call["threshold"] for call in evaluation_calls] == [0.3, 0.4, 0.5, 0.4, 0.3, 0.4, 0.5, 0.5]
-    assert all(call["test_rows"] == 2 for call in evaluation_calls)
+    assert [call["threshold"] for call in evaluation_calls] == [0.35, 0.35, 0.35, 0.35]
+    assert [call["test_rows"] for call in evaluation_calls] == [2, 2, 2, 2]
 
     assert dump_calls[0][1] == tbm.MODEL_PATHS["Logistic Regression"]
     assert dump_calls[1][1] == tbm.MODEL_PATHS["Random Forest"]
-    assert dump_calls[0][0]["threshold"] == 0.4
-    assert dump_calls[1][0]["threshold"] == 0.5
-    assert dump_calls[0][0]["validation_metrics"][0.4]["f1"] == 0.80
-    assert dump_calls[1][0]["validation_metrics"][0.5]["f1"] == 0.90
-    assert dump_calls[0][0]["test_metrics"]["threshold"] == 0.4
-    assert dump_calls[1][0]["test_metrics"]["threshold"] == 0.5
-
+    assert dump_calls[0][0]["threshold"] == 0.35
+    assert dump_calls[1][0]["threshold"] == 0.35
+    assert dump_calls[0][0]["validation_metrics"]["accuracy"] == 0.80
+    assert dump_calls[1][0]["validation_metrics"]["accuracy"] == 0.80
+    assert dump_calls[0][0]["test_metrics"]["accuracy"] == 0.90
+    assert dump_calls[1][0]["test_metrics"]["accuracy"] == 0.90
