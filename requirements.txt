@@ -4,3 +4,4 @@ matplotlib
 kaggle
 streamlit
 joblib
+pytest

@@ -11,6 +11,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from src.data.load_data import (
+    PROJECT_ROOT,
     load_accounts,
     load_churn_events,
     load_feature_usage,
@@ -21,13 +22,16 @@ from src.evaluation.classification import evaluate_binary_classifier
 from src.features.account_level_features import build_account_level_features
 
 
-MODEL_DIR = Path("data/models")
+MODEL_DIR = PROJECT_ROOT / "data" / "models"
 MODEL_PATHS = {
     "Logistic Regression": MODEL_DIR / "logistic_regression.joblib",
     "Random Forest": MODEL_DIR / "random_forest.joblib",
 }
 TARGET_COLUMN = "churn_flag"
 RANDOM_STATE = 42
+VALIDATION_SIZE = 0.2
+TEST_SIZE = 0.2
+THRESHOLDS = (0.3, 0.4, 0.5)
 
 
 def load_training_data() -> pd.DataFrame:
@@ -60,6 +64,29 @@ def split_features_and_target(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series
     return X, y
 
 
+def split_train_validation_test(
+    X: pd.DataFrame,
+    y: pd.Series,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series]:
+    holdout_size = VALIDATION_SIZE + TEST_SIZE
+    X_train, X_holdout, y_train, y_holdout = train_test_split(
+        X,
+        y,
+        test_size=holdout_size,
+        stratify=y,
+        random_state=RANDOM_STATE,
+    )
+
+    X_val, X_test, y_val, y_test = train_test_split(
+        X_holdout,
+        y_holdout,
+        test_size=TEST_SIZE / holdout_size,
+        stratify=y_holdout,
+        random_state=RANDOM_STATE,
+    )
+    return X_train, X_val, X_test, y_train, y_val, y_test
+
+
 def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
     categorical_columns = [
         column
@@ -68,8 +95,11 @@ def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
            or pd.api.types.is_object_dtype(X[column])
            or pd.api.types.is_string_dtype(X[column])
     ]
-    numeric_columns = X.select_dtypes(include=["number"]).columns.tolist()
     boolean_columns = X.select_dtypes(include=["bool"]).columns.tolist()
+    numeric_columns = [
+        column for column in X.select_dtypes(include=["number"]).columns
+        if column not in boolean_columns
+    ]
 
     preprocessor = ColumnTransformer(
         transformers=[
@@ -99,68 +129,99 @@ def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
     return preprocessor
 
 
-def build_random_forest_model(X: pd.DataFrame) -> Pipeline:
+def build_model_pipeline(X: pd.DataFrame, classifier) -> Pipeline:
     return Pipeline(
         steps=[
             ("preprocessor", build_preprocessor(X)),
-            ("classifier", RandomForestClassifier(
-                n_estimators=300,
-                max_depth=8,
-                min_samples_leaf=5,
-                class_weight="balanced",
-                random_state=RANDOM_STATE,
-            )),
+            ("classifier", classifier),
         ]
     )
 
+
+def build_random_forest_model(X: pd.DataFrame) -> Pipeline:
+    return build_model_pipeline(
+        X,
+        RandomForestClassifier(
+            n_estimators=300,
+            max_depth=8,
+            min_samples_leaf=5,
+            class_weight="balanced",
+            random_state=RANDOM_STATE,
+        ),
+    )
+
+
 def build_logistic_regression_model(X: pd.DataFrame) -> Pipeline:
-    return Pipeline(
-        steps=[
-            ("preprocessor", build_preprocessor(X)),
-            (
-                "classifier",
-                LogisticRegression(
-                    class_weight="balanced",
-                    max_iter=1000,
-                    random_state=RANDOM_STATE,
-                ),
-            ),
-        ]
+    return build_model_pipeline(
+        X,
+        LogisticRegression(
+            class_weight="balanced",
+            max_iter=1000,
+            random_state=RANDOM_STATE,
+        ),
+    )
+
+
+def select_best_threshold(validation_metrics: dict[float, dict[str, object]]) -> float:
+    return max(
+        validation_metrics,
+        key=lambda threshold: (
+            float(validation_metrics[threshold]["f1"]),
+            float(validation_metrics[threshold]["recall"]),
+            float(validation_metrics[threshold]["precision"]),
+        ),
     )
 
 
 def main() -> None:
+    MODEL_DIR.mkdir(parents=True, exist_ok=True)
+
     df = load_training_data()
     X, y = split_features_and_target(df)
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X,
-        y,
-        test_size=0.2,
-        stratify=y,
-        random_state=RANDOM_STATE,
-    )
+    X_train, X_val, X_test, y_train, y_val, y_test = split_train_validation_test(X, y)
 
     models = {
         "Logistic Regression": build_logistic_regression_model(X_train),
         "Random Forest": build_random_forest_model(X_train),
     }
 
-    thresholds = [0.3, 0.4, 0.5]
-
     for model_name, model in models.items():
         model.fit(X_train, y_train)
 
-        for threshold in thresholds:
-            evaluate_binary_classifier(
+        validation_metrics: dict[float, dict[str, object]] = {}
+        for threshold in THRESHOLDS:
+            validation_metrics[threshold] = evaluate_binary_classifier(
                 model=model,
-                X_test=X_test,
-                y_test=y_test,
-                model_name=f"{model_name} threshold={threshold}",
+                X_test=X_val,
+                y_test=y_val,
+                model_name=f"{model_name} validation threshold={threshold:.2f}",
                 threshold=threshold,
             )
 
-        joblib.dump(model, MODEL_PATHS[model_name])
+        best_threshold = select_best_threshold(validation_metrics)
+        print(
+            f"{model_name} selected validation threshold: {best_threshold:.2f} "
+            f"(F1={validation_metrics[best_threshold]['f1']:.3f})"
+        )
+
+        test_metrics = evaluate_binary_classifier(
+            model=model,
+            X_test=X_test,
+            y_test=y_test,
+            model_name=f"{model_name} test threshold={best_threshold:.2f}",
+            threshold=best_threshold,
+        )
+
+        joblib.dump(
+            {
+                "model": model,
+                "threshold": best_threshold,
+                "validation_metrics": validation_metrics,
+                "test_metrics": test_metrics,
+            },
+            MODEL_PATHS[model_name],
+        )
 
 
 if __name__ == "__main__":
