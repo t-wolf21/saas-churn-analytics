@@ -311,7 +311,7 @@ def build_account_level_features(
 
     account_level_features["tickets_per_month"] = (
             account_level_features["ticket_count"]
-            / ((account_level_features["account_age_days"] / 30.44).clip(lower=1))
+            / ((account_level_features["account_age_days"] / 30).clip(lower=1))
     )
 
     account_level_features["usage_per_day"] = (
@@ -327,6 +327,21 @@ def build_account_level_features(
     account_level_features["account_activity_score"] = (
             account_level_features["usage_per_day"]
             * account_level_features["unique_features_used"]
+    )
+
+    account_level_features["errors_per_day"] = (
+            account_level_features["total_error_count"]
+            / account_level_features["account_age_days"].clip(lower=1)
+    )
+
+    account_level_features["tickets_per_usage"] = (
+            account_level_features["ticket_count"]
+            / account_level_features["total_usage_count"].clip(lower=1)
+    )
+
+    account_level_features["tickets_per_feature"] = (
+            account_level_features["ticket_count"]
+            / account_level_features["unique_features_used"].clip(lower=1)
     )
 
     return account_level_features
