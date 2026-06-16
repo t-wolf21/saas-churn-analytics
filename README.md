@@ -10,6 +10,12 @@ Install the project dependencies:
 pip install -r requirements.txt
 ```
 
+For reproducible model results across machines, install the locked environment:
+
+```bash
+pip install -r requirements-lock.txt
+```
+
 Load a CSV file from the local raw data folder:
 
 ```python
@@ -41,3 +47,15 @@ Expected CSV target column:
 ```text
 churn
 ```
+
+## Reproducibility Check
+
+Verify that the current checkout, raw CSV files, and critical package versions
+match the locked project setup:
+
+```bash
+python scripts/check_reproducibility.py
+```
+
+If this check fails on another machine, compare the printed Git status, CSV
+checksums, and package versions before comparing model scores.
