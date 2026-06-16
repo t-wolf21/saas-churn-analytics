@@ -31,8 +31,7 @@ TARGET_COLUMN = "churn_flag"
 RANDOM_STATE = 42
 VALIDATION_SIZE = 0.2
 TEST_SIZE = 0.2
-FIXED_THRESHOLD = 0.35 # Selected on validation set
-
+FIXED_THRESHOLD = 0.42 # Selected on validation set
 
 def load_training_data() -> pd.DataFrame:
     accounts = load_accounts()
@@ -144,7 +143,8 @@ def build_random_forest_model(X: pd.DataFrame) -> Pipeline:
         RandomForestClassifier(
             n_estimators=300,
             max_depth=8,
-            min_samples_leaf=5,
+            min_samples_leaf=1,
+            min_samples_split=5,
             class_weight="balanced",
             random_state=RANDOM_STATE,
         ),
@@ -207,6 +207,7 @@ def main() -> None:
             },
             MODEL_PATHS[model_name],
         )
+
 
 
 if __name__ == "__main__":

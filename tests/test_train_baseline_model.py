@@ -31,7 +31,7 @@ def test_split_features_and_target_drops_metadata_columns_and_returns_int_target
 
 
 def test_fixed_threshold_is_default_value():
-    assert tbm.FIXED_THRESHOLD == 0.35
+    assert tbm.FIXED_THRESHOLD == 0.42
 
 
 def test_split_train_validation_test_creates_expected_partition_sizes():
@@ -191,18 +191,18 @@ def test_main_uses_validation_split_and_saves_artifacts(monkeypatch):
 
     assert [model.fit_calls for model in built_models] == [2, 2]
     assert [call["model_name"] for call in evaluation_calls] == [
-        "Logistic Regression validation threshold=0.35",
-        "Logistic Regression test threshold=0.35",
-        "Random Forest validation threshold=0.35",
-        "Random Forest test threshold=0.35",
+        "Logistic Regression validation threshold=0.42",
+        "Logistic Regression test threshold=0.42",
+        "Random Forest validation threshold=0.42",
+        "Random Forest test threshold=0.42",
     ]
-    assert [call["threshold"] for call in evaluation_calls] == [0.35, 0.35, 0.35, 0.35]
+    assert [call["threshold"] for call in evaluation_calls] == [0.42, 0.42, 0.42, 0.42]
     assert [call["test_rows"] for call in evaluation_calls] == [2, 2, 2, 2]
 
     assert dump_calls[0][1] == tbm.MODEL_PATHS["Logistic Regression"]
     assert dump_calls[1][1] == tbm.MODEL_PATHS["Random Forest"]
-    assert dump_calls[0][0]["threshold"] == 0.35
-    assert dump_calls[1][0]["threshold"] == 0.35
+    assert dump_calls[0][0]["threshold"] == 0.42
+    assert dump_calls[1][0]["threshold"] == 0.42
     assert dump_calls[0][0]["validation_metrics"]["accuracy"] == 0.80
     assert dump_calls[1][0]["validation_metrics"]["accuracy"] == 0.80
     assert dump_calls[0][0]["test_metrics"]["accuracy"] == 0.90
