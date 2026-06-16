@@ -90,13 +90,17 @@ def _build_snapshot_dates(
 
     snapshot_dates = snapshot_dates.merge(event_churn_dates, on="account_id", how="left")
     snapshot_dates = snapshot_dates.merge(subscription_churn_dates, on="account_id", how="left")
-    snapshot_dates["churn_date"] = snapshot_dates[["event_churn_date", "subscription_churn_date"]].min(axis=1)
+    snapshot_dates["churn_date"] = pd.to_datetime(
+        snapshot_dates[["event_churn_date", "subscription_churn_date"]].min(axis=1),
+        errors="coerce",
+    )
 
     snapshot_dates["snapshot_date"] = observation_end_date
     churned_accounts = snapshot_dates["churn_flag"] & snapshot_dates["churn_date"].notna()
-    snapshot_dates.loc[churned_accounts, "snapshot_date"] = snapshot_dates.loc[churned_accounts, "churn_date"] - pd.Timedelta(
-        days=1
-    )
+    if churned_accounts.any():
+        snapshot_dates.loc[churned_accounts, "snapshot_date"] = (
+            snapshot_dates.loc[churned_accounts, "churn_date"] - pd.Timedelta(days=1)
+        )
 
     snapshot_dates["account_age_days"] = (snapshot_dates["snapshot_date"] - snapshot_dates["signup_date"]).dt.days
     snapshot_dates["account_age_days"] = snapshot_dates["account_age_days"].clip(lower=0)
