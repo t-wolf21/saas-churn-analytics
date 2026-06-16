@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "saas-churn-analytics"
+version = "0.1.0"
+description = "Machine learning pipeline for SaaS churn prediction"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "joblib",
+  "kaggle",
+  "matplotlib",
+  "pandas",
+  "scikit-learn",
+  "streamlit",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
