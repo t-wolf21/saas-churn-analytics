@@ -348,4 +348,13 @@ def build_account_level_features(
             / account_level_features["unique_features_used"].clip(lower=1)
     )
 
+    account_level_features["duration_per_month"] = (
+            account_level_features["total_usage_duration_secs"]
+            / (account_level_features["account_age_days"] / 30).clip(lower=1)
+    )
+
+    account_level_features["arr_per_subscription"] = (
+            account_level_features["total_arr"]
+            / account_level_features["subscription_count"].clip(lower=1)
+    )
     return account_level_features
