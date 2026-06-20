@@ -1,3 +1,5 @@
+[![CI](https://github.com/t-wolf21/saas-churn-analytics/actions/workflows/ci.yml/badge.svg)](https://github.com/t-wolf21/saas-churn-analytics/actions/workflows/ci.yml)
+
 # SaaS Churn Analytics
 
 Machine learning pipeline for predicting customer churn in subscription-based SaaS products.
@@ -11,7 +13,16 @@ This project uses a synthetic SaaS dataset to build account-level churn features
 - Trains and compares Logistic Regression and Random Forest classifiers.
 - Selects each model's decision threshold on the validation split by maximizing F1.
 - Reports precision, recall, F1, ROC AUC, PR AUC, and confusion matrices.
-- Includes unit tests, locked dependencies, raw-data checksums, and a notebook report.
+- Includes unit tests, locked dependencies, raw-data checksums, GitHub Actions CI, and a notebook report.
+
+## What This Project Demonstrates
+
+- Leakage-aware feature engineering from relational SaaS data.
+- Validation-based threshold tuning for imbalanced churn classification.
+- Reproducible Python ML pipeline with locked dependencies.
+- Unit-tested feature engineering and model training logic.
+- Business-oriented evaluation using precision, recall, F1, ROC AUC, and PR AUC.
+- GitHub Actions CI for automated test validation.
 
 ## Results
 
@@ -28,6 +39,9 @@ The Random Forest currently gives the strongest threshold-based test F1 and prec
 
 ```text
 saas-churn-analytics/
+  .github/
+    workflows/
+      ci.yml              GitHub Actions test workflow
   data/
     raw/                 Local Kaggle dataset files, not committed
     models/              Generated model artifacts, not committed
@@ -46,6 +60,7 @@ saas-churn-analytics/
     features/            Account-level feature engineering
     models/              Training pipeline
   tests/
+    test_account_level_features.py
     test_train_baseline_model.py
 ```
 
@@ -146,5 +161,5 @@ It walks through the dataset, exploratory analysis, feature engineering, train/v
 ## Next Steps
 
 - Add targeted tests for the snapshot-date feature engineering logic.
-- Add a small CI workflow that runs tests and the reproducibility check.
+- Export model metrics and feature importance into human-readable report files.
 - Add a small Streamlit dashboard after the notebook and pipeline remain stable.
