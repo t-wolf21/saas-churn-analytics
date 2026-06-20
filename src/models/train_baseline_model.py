@@ -1,11 +1,13 @@
 from pathlib import Path
 
 import joblib
+import numpy as np
 import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import f1_score
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
@@ -31,7 +33,9 @@ TARGET_COLUMN = "churn_flag"
 RANDOM_STATE = 42
 VALIDATION_SIZE = 0.2
 TEST_SIZE = 0.2
-FIXED_THRESHOLD = 0.42 # Selected on validation set
+THRESHOLD_GRID = np.arange(0.05, 0.96, 0.01)
+THRESHOLD_SELECTION_METRIC = "f1"
+
 
 def load_training_data() -> pd.DataFrame:
     accounts = load_accounts()
@@ -162,6 +166,24 @@ def build_logistic_regression_model(X: pd.DataFrame) -> Pipeline:
     )
 
 
+def select_best_threshold(
+    model: Pipeline,
+    X_val: pd.DataFrame,
+    y_val: pd.Series,
+    thresholds: np.ndarray | None = None,
+) -> float:
+    if thresholds is None:
+        thresholds = THRESHOLD_GRID
+
+    y_proba = model.predict_proba(X_val)[:, 1]
+    scores = [
+        f1_score(y_val, (y_proba >= threshold).astype(int), zero_division=0)
+        for threshold in thresholds
+    ]
+    best_index = int(np.argmax(scores))
+    return float(thresholds[best_index])
+
+
 def main() -> None:
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -177,13 +199,14 @@ def main() -> None:
 
     for model_name, model in models.items():
         model.fit(X_train, y_train)
+        threshold = select_best_threshold(model, X_val, y_val)
 
         validation_metrics = evaluate_binary_classifier(
             model=model,
             X_test=X_val,
             y_test=y_val,
-            model_name=f"{model_name} validation threshold={FIXED_THRESHOLD:.2f}",
-            threshold=FIXED_THRESHOLD,
+            model_name=f"{model_name} validation threshold={threshold:.2f}",
+            threshold=threshold,
         )
 
         X_train_full = pd.concat([X_train, X_val], axis=0)
@@ -194,14 +217,15 @@ def main() -> None:
             model=model,
             X_test=X_test,
             y_test=y_test,
-            model_name=f"{model_name} test threshold={FIXED_THRESHOLD:.2f}",
-            threshold=FIXED_THRESHOLD,
+            model_name=f"{model_name} test threshold={threshold:.2f}",
+            threshold=threshold,
         )
 
         joblib.dump(
             {
                 "model": model,
-                "threshold": FIXED_THRESHOLD,
+                "threshold": threshold,
+                "threshold_selection_metric": THRESHOLD_SELECTION_METRIC,
                 "validation_metrics": validation_metrics,
                 "test_metrics": test_metrics,
             },

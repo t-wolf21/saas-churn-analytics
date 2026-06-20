@@ -9,20 +9,20 @@ This project uses a synthetic SaaS dataset to build account-level churn features
 - Loads and validates five related SaaS data tables: accounts, subscriptions, feature usage, support tickets, and churn events.
 - Builds account-level features while avoiding post-churn data leakage.
 - Trains and compares Logistic Regression and Random Forest classifiers.
-- Uses a fixed decision threshold selected on the validation split.
+- Selects each model's decision threshold on the validation split by maximizing F1.
 - Reports precision, recall, F1, ROC AUC, PR AUC, and confusion matrices.
 - Includes unit tests, locked dependencies, raw-data checksums, and a notebook report.
 
 ## Results
 
-Current test-set results with `FIXED_THRESHOLD = 0.42`, selected on the validation split:
+Current test-set results with model-specific thresholds selected on the validation split:
 
-| Model | Precision | Recall | F1 | ROC AUC | PR AUC |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Logistic Regression | 0.425 | 0.773 | 0.548 | 0.825 | 0.713 |
-| Random Forest | 0.789 | 0.682 | 0.732 | 0.804 | 0.715 |
+| Model | Threshold | Precision | Recall | F1 | ROC AUC | PR AUC |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Logistic Regression | 0.56 | 0.536 | 0.682 | 0.600 | 0.820 | 0.696 |
+| Random Forest | 0.41 | 0.652 | 0.682 | 0.667 | 0.802 | 0.717 |
 
-The Random Forest currently gives the strongest threshold-based test performance, while Logistic Regression provides a useful linear baseline with higher churn recall.
+The Random Forest currently gives the strongest threshold-based test F1 and precision, while Logistic Regression provides a useful linear baseline with slightly higher ROC AUC.
 
 ## Project Structure
 

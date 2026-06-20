@@ -30,8 +30,26 @@ def test_split_features_and_target_drops_metadata_columns_and_returns_int_target
     )
 
 
-def test_fixed_threshold_is_default_value():
-    assert tbm.FIXED_THRESHOLD == 0.42
+def test_select_best_threshold_returns_threshold_with_highest_validation_f1():
+    class DummyModel:
+        def predict_proba(self, X):
+            return np.array(
+                [
+                    [0.10, 0.90],
+                    [0.60, 0.40],
+                    [0.40, 0.60],
+                    [0.80, 0.20],
+                ]
+            )
+
+    threshold = tbm.select_best_threshold(
+        model=DummyModel(),
+        X_val=pd.DataFrame({"feature": [1, 2, 3, 4]}),
+        y_val=pd.Series([1, 0, 1, 0]),
+        thresholds=np.array([0.30, 0.50, 0.70]),
+    )
+
+    assert threshold == 0.50
 
 
 def test_split_train_validation_test_creates_expected_partition_sizes():
@@ -117,6 +135,7 @@ def test_main_uses_validation_split_and_saves_artifacts(monkeypatch):
     )
 
     evaluation_calls = []
+    threshold_selection_calls = []
     dump_calls = []
     built_models = []
 
@@ -168,6 +187,17 @@ def test_main_uses_validation_split_and_saves_artifacts(monkeypatch):
         )
         return metrics
 
+    def fake_select_best_threshold(model, X_val, y_val):
+        threshold = 0.60 if model.name == "Logistic Regression" else 0.42
+        threshold_selection_calls.append(
+            {
+                "model": model.name,
+                "validation_rows": len(X_val),
+                "threshold": threshold,
+            }
+        )
+        return threshold
+
     def fake_split_train_validation_test(X, y):
         X_train = pd.DataFrame({"feature": [1, 2, 3, 4, 5, 6]})
         X_val = pd.DataFrame({"feature": [7, 8]})
@@ -184,25 +214,32 @@ def test_main_uses_validation_split_and_saves_artifacts(monkeypatch):
     monkeypatch.setattr(tbm, "split_train_validation_test", fake_split_train_validation_test)
     monkeypatch.setattr(tbm, "build_logistic_regression_model", fake_build_logistic_regression_model)
     monkeypatch.setattr(tbm, "build_random_forest_model", fake_build_random_forest_model)
+    monkeypatch.setattr(tbm, "select_best_threshold", fake_select_best_threshold)
     monkeypatch.setattr(tbm, "evaluate_binary_classifier", fake_evaluate_binary_classifier)
     monkeypatch.setattr(tbm.joblib, "dump", fake_joblib_dump)
 
     tbm.main()
 
     assert [model.fit_calls for model in built_models] == [2, 2]
+    assert threshold_selection_calls == [
+        {"model": "Logistic Regression", "validation_rows": 2, "threshold": 0.60},
+        {"model": "Random Forest", "validation_rows": 2, "threshold": 0.42},
+    ]
     assert [call["model_name"] for call in evaluation_calls] == [
-        "Logistic Regression validation threshold=0.42",
-        "Logistic Regression test threshold=0.42",
+        "Logistic Regression validation threshold=0.60",
+        "Logistic Regression test threshold=0.60",
         "Random Forest validation threshold=0.42",
         "Random Forest test threshold=0.42",
     ]
-    assert [call["threshold"] for call in evaluation_calls] == [0.42, 0.42, 0.42, 0.42]
+    assert [call["threshold"] for call in evaluation_calls] == [0.6, 0.6, 0.42, 0.42]
     assert [call["test_rows"] for call in evaluation_calls] == [2, 2, 2, 2]
 
     assert dump_calls[0][1] == tbm.MODEL_PATHS["Logistic Regression"]
     assert dump_calls[1][1] == tbm.MODEL_PATHS["Random Forest"]
-    assert dump_calls[0][0]["threshold"] == 0.42
+    assert dump_calls[0][0]["threshold"] == 0.6
     assert dump_calls[1][0]["threshold"] == 0.42
+    assert dump_calls[0][0]["threshold_selection_metric"] == "f1"
+    assert dump_calls[1][0]["threshold_selection_metric"] == "f1"
     assert dump_calls[0][0]["validation_metrics"]["accuracy"] == 0.80
     assert dump_calls[1][0]["validation_metrics"]["accuracy"] == 0.80
     assert dump_calls[0][0]["test_metrics"]["accuracy"] == 0.90
