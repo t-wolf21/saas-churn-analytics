@@ -13,6 +13,7 @@ This project uses a synthetic SaaS dataset to build account-level churn features
 - Trains and compares Logistic Regression and Random Forest classifiers.
 - Selects each model's decision threshold on the validation split by maximizing F1.
 - Reports precision, recall, F1, ROC AUC, PR AUC, and confusion matrices.
+- Exports model metrics and Random Forest feature importances as human-readable report files.
 - Includes unit tests, locked dependencies, raw-data checksums, GitHub Actions CI, and a notebook report.
 
 ## What This Project Demonstrates
@@ -50,6 +51,9 @@ saas-churn-analytics/
     dataset.md           Dataset description and source notes
   notebooks/
     churn_model_report.ipynb
+  reports/
+    feature_importance.csv
+    model_metrics.json
   scripts/
     check_reproducibility.py
     download_dataset.py
@@ -139,7 +143,7 @@ Run the baseline training pipeline:
 python -m src.models.train_baseline_model
 ```
 
-This trains both baseline models and writes generated artifacts to `data/models/`.
+This trains both baseline models, writes generated model artifacts to `data/models/`, and exports human-readable reports to `reports/`.
 
 ## Notebook Report
 
@@ -160,6 +164,6 @@ It walks through the dataset, exploratory analysis, feature engineering, train/v
 
 ## Next Steps
 
-- Add targeted tests for the snapshot-date feature engineering logic.
-- Export model metrics and feature importance into human-readable report files.
+- Add an end-to-end smoke test for the full training pipeline.
+- Add a concise business interpretation of the top churn drivers.
 - Add a small Streamlit dashboard after the notebook and pipeline remain stable.

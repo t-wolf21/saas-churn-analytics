@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 import pandas as pd
 
@@ -6,6 +8,12 @@ from src.models import train_baseline_model as tbm
 
 def test_model_dir_is_anchored_to_project_root():
     assert tbm.MODEL_DIR == tbm.PROJECT_ROOT / "data" / "models"
+
+
+def test_report_paths_are_anchored_to_project_root():
+    assert tbm.REPORT_DIR == tbm.PROJECT_ROOT / "reports"
+    assert tbm.METRICS_REPORT_PATH == tbm.REPORT_DIR / "model_metrics.json"
+    assert tbm.FEATURE_IMPORTANCE_REPORT_PATH == tbm.REPORT_DIR / "feature_importance.csv"
 
 
 def test_split_features_and_target_drops_metadata_columns_and_returns_int_target():
@@ -50,6 +58,54 @@ def test_select_best_threshold_returns_threshold_with_highest_validation_f1():
     )
 
     assert threshold == 0.50
+
+
+def test_write_model_metrics_report_serializes_numpy_values(tmp_path):
+    report_path = tmp_path / "model_metrics.json"
+
+    tbm.write_model_metrics_report(
+        {
+            "Dummy Model": {
+                "threshold": np.float64(0.42),
+                "validation_metrics": {
+                    "f1": np.float64(0.8),
+                    "confusion_matrix": np.array([[1, 0], [0, 1]]),
+                },
+                "test_metrics": {
+                    "f1": np.float64(0.9),
+                    "confusion_matrix": np.array([[2, 0], [1, 1]]),
+                },
+            }
+        },
+        path=report_path,
+    )
+
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+
+    assert report["random_state"] == tbm.RANDOM_STATE
+    assert report["threshold_selection_metric"] == "f1"
+    assert report["models"]["Dummy Model"]["threshold"] == 0.42
+    assert report["models"]["Dummy Model"]["validation_metrics"]["confusion_matrix"] == [[1, 0], [0, 1]]
+
+
+def test_extract_feature_importance_returns_sorted_random_forest_importances():
+    X = pd.DataFrame(
+        {
+            "numeric_feature": [0.0, 1.0, 2.0, 3.0],
+            "categorical_feature": ["a", "b", "a", "b"],
+            "boolean_feature": [False, True, False, True],
+        }
+    )
+    y = pd.Series([0, 1, 0, 1], name="churn_flag")
+    model = tbm.build_random_forest_model(X)
+    model.fit(X, y)
+
+    feature_importance = tbm.extract_feature_importance(model, "Random Forest")
+
+    assert list(feature_importance.columns) == ["model", "feature", "importance"]
+    assert not feature_importance.empty
+    assert feature_importance["model"].eq("Random Forest").all()
+    assert feature_importance["importance"].is_monotonic_decreasing
 
 
 def test_split_train_validation_test_creates_expected_partition_sizes():
@@ -137,6 +193,9 @@ def test_main_uses_validation_split_and_saves_artifacts(monkeypatch):
     evaluation_calls = []
     threshold_selection_calls = []
     dump_calls = []
+    metrics_report_calls = []
+    feature_importance_extraction_calls = []
+    feature_importance_report_calls = []
     built_models = []
 
     class DummyModel:
@@ -210,12 +269,33 @@ def test_main_uses_validation_split_and_saves_artifacts(monkeypatch):
     def fake_joblib_dump(obj, path):
         dump_calls.append((obj, path))
 
+    def fake_write_model_metrics_report(model_results):
+        metrics_report_calls.append(model_results)
+
+    def fake_extract_feature_importance(model, model_name):
+        feature_importance_extraction_calls.append((model.name, model_name))
+        if model_name == "Random Forest":
+            return pd.DataFrame(
+                {
+                    "model": [model_name],
+                    "feature": ["numeric_feature"],
+                    "importance": [1.0],
+                }
+            )
+        return pd.DataFrame(columns=["model", "feature", "importance"])
+
+    def fake_write_feature_importance_report(feature_importance_frames):
+        feature_importance_report_calls.append(feature_importance_frames)
+
     monkeypatch.setattr(tbm, "load_training_data", fake_load_training_data)
     monkeypatch.setattr(tbm, "split_train_validation_test", fake_split_train_validation_test)
     monkeypatch.setattr(tbm, "build_logistic_regression_model", fake_build_logistic_regression_model)
     monkeypatch.setattr(tbm, "build_random_forest_model", fake_build_random_forest_model)
     monkeypatch.setattr(tbm, "select_best_threshold", fake_select_best_threshold)
     monkeypatch.setattr(tbm, "evaluate_binary_classifier", fake_evaluate_binary_classifier)
+    monkeypatch.setattr(tbm, "write_model_metrics_report", fake_write_model_metrics_report)
+    monkeypatch.setattr(tbm, "extract_feature_importance", fake_extract_feature_importance)
+    monkeypatch.setattr(tbm, "write_feature_importance_report", fake_write_feature_importance_report)
     monkeypatch.setattr(tbm.joblib, "dump", fake_joblib_dump)
 
     tbm.main()
@@ -244,3 +324,12 @@ def test_main_uses_validation_split_and_saves_artifacts(monkeypatch):
     assert dump_calls[1][0]["validation_metrics"]["accuracy"] == 0.80
     assert dump_calls[0][0]["test_metrics"]["accuracy"] == 0.90
     assert dump_calls[1][0]["test_metrics"]["accuracy"] == 0.90
+
+    assert list(metrics_report_calls[0]) == ["Logistic Regression", "Random Forest"]
+    assert metrics_report_calls[0]["Logistic Regression"]["threshold"] == 0.6
+    assert metrics_report_calls[0]["Random Forest"]["threshold"] == 0.42
+    assert feature_importance_extraction_calls == [
+        ("Logistic Regression", "Logistic Regression"),
+        ("Random Forest", "Random Forest"),
+    ]
+    assert len(feature_importance_report_calls[0]) == 2

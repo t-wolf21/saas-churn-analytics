@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import joblib
@@ -25,10 +26,13 @@ from src.features.account_level_features import build_account_level_features
 
 
 MODEL_DIR = PROJECT_ROOT / "data" / "models"
+REPORT_DIR = PROJECT_ROOT / "reports"
 MODEL_PATHS = {
     "Logistic Regression": MODEL_DIR / "logistic_regression.joblib",
     "Random Forest": MODEL_DIR / "random_forest.joblib",
 }
+METRICS_REPORT_PATH = REPORT_DIR / "model_metrics.json"
+FEATURE_IMPORTANCE_REPORT_PATH = REPORT_DIR / "feature_importance.csv"
 TARGET_COLUMN = "churn_flag"
 RANDOM_STATE = 42
 VALIDATION_SIZE = 0.2
@@ -181,11 +185,79 @@ def select_best_threshold(
         for threshold in thresholds
     ]
     best_index = int(np.argmax(scores))
-    return float(thresholds[best_index])
+    return round(float(thresholds[best_index]), 2)
+
+
+def _to_jsonable(value):
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, np.integer):
+        return int(value)
+    if isinstance(value, np.floating):
+        return float(value)
+    if isinstance(value, dict):
+        return {key: _to_jsonable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_to_jsonable(item) for item in value]
+    return value
+
+
+def write_model_metrics_report(
+    model_results: dict[str, dict[str, object]],
+    path: Path = METRICS_REPORT_PATH,
+) -> None:
+    report = {
+        "random_state": RANDOM_STATE,
+        "validation_size": VALIDATION_SIZE,
+        "test_size": TEST_SIZE,
+        "threshold_selection_metric": THRESHOLD_SELECTION_METRIC,
+        "models": _to_jsonable(model_results),
+    }
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+
+
+def extract_feature_importance(model: Pipeline, model_name: str) -> pd.DataFrame:
+    if not hasattr(model, "named_steps"):
+        return pd.DataFrame(columns=["model", "feature", "importance"])
+
+    classifier = model.named_steps.get("classifier")
+    preprocessor = model.named_steps.get("preprocessor")
+    if classifier is None or preprocessor is None or not hasattr(classifier, "feature_importances_"):
+        return pd.DataFrame(columns=["model", "feature", "importance"])
+
+    feature_names = preprocessor.get_feature_names_out()
+    importances = classifier.feature_importances_
+    if len(feature_names) != len(importances):
+        raise ValueError("Feature names and importances have different lengths.")
+
+    feature_importance = pd.DataFrame(
+        {
+            "model": model_name,
+            "feature": [feature_name.split("__", maxsplit=1)[-1] for feature_name in feature_names],
+            "importance": importances,
+        }
+    )
+    return feature_importance.sort_values("importance", ascending=False).reset_index(drop=True)
+
+
+def write_feature_importance_report(
+    feature_importance_frames: list[pd.DataFrame],
+    path: Path = FEATURE_IMPORTANCE_REPORT_PATH,
+) -> None:
+    if feature_importance_frames:
+        report = pd.concat(feature_importance_frames, ignore_index=True)
+    else:
+        report = pd.DataFrame(columns=["model", "feature", "importance"])
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    report.to_csv(path, index=False)
 
 
 def main() -> None:
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
+    REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
     df = load_training_data()
     X, y = split_features_and_target(df)
@@ -196,6 +268,9 @@ def main() -> None:
         "Logistic Regression": build_logistic_regression_model(X_train),
         "Random Forest": build_random_forest_model(X_train),
     }
+
+    model_results = {}
+    feature_importance_frames = []
 
     for model_name, model in models.items():
         model.fit(X_train, y_train)
@@ -232,6 +307,15 @@ def main() -> None:
             MODEL_PATHS[model_name],
         )
 
+        model_results[model_name] = {
+            "threshold": threshold,
+            "validation_metrics": validation_metrics,
+            "test_metrics": test_metrics,
+        }
+        feature_importance_frames.append(extract_feature_importance(model, model_name))
+
+    write_model_metrics_report(model_results)
+    write_feature_importance_report(feature_importance_frames)
 
 
 if __name__ == "__main__":
