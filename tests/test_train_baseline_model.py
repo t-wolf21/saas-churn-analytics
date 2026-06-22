@@ -333,3 +333,59 @@ def test_main_uses_validation_split_and_saves_artifacts(monkeypatch):
         ("Random Forest", "Random Forest"),
     ]
     assert len(feature_importance_report_calls[0]) == 2
+
+
+def test_main_runs_end_to_end_with_synthetic_training_data(monkeypatch, tmp_path):
+    row_count = 30
+    training_df = pd.DataFrame(
+        {
+            "account_id": range(row_count),
+            "account_name": [f"account-{idx}" for idx in range(row_count)],
+            "signup_date": ["2024-01-01"] * row_count,
+            "snapshot_date": ["2024-03-01"] * row_count,
+            "churn_flag": [0, 1] * (row_count // 2),
+            "usage_count": [idx * 3 + 10 for idx in range(row_count)],
+            "ticket_count": [idx % 5 for idx in range(row_count)],
+            "plan_tier": ["Basic", "Pro", "Enterprise"] * 10,
+            "has_usage": [idx % 2 == 0 for idx in range(row_count)],
+        }
+    )
+
+    model_dir = tmp_path / "models"
+    report_dir = tmp_path / "reports"
+    model_paths = {
+        "Logistic Regression": model_dir / "logistic_regression.joblib",
+        "Random Forest": model_dir / "random_forest.joblib",
+    }
+    metrics_report_path = report_dir / "model_metrics.json"
+    feature_importance_report_path = report_dir / "feature_importance.csv"
+
+    monkeypatch.setattr(tbm, "load_training_data", lambda: training_df)
+    monkeypatch.setattr(tbm, "MODEL_DIR", model_dir)
+    monkeypatch.setattr(tbm, "REPORT_DIR", report_dir)
+    monkeypatch.setattr(tbm, "MODEL_PATHS", model_paths)
+    monkeypatch.setattr(tbm, "METRICS_REPORT_PATH", metrics_report_path)
+    monkeypatch.setattr(tbm, "FEATURE_IMPORTANCE_REPORT_PATH", feature_importance_report_path)
+
+    tbm.main()
+
+    assert model_paths["Logistic Regression"].exists()
+    assert model_paths["Random Forest"].exists()
+    assert metrics_report_path.exists()
+    assert feature_importance_report_path.exists()
+
+    logistic_artifact = tbm.joblib.load(model_paths["Logistic Regression"])
+    random_forest_artifact = tbm.joblib.load(model_paths["Random Forest"])
+    assert 0.0 <= logistic_artifact["threshold"] <= 1.0
+    assert 0.0 <= random_forest_artifact["threshold"] <= 1.0
+    assert logistic_artifact["threshold_selection_metric"] == "f1"
+    assert random_forest_artifact["threshold_selection_metric"] == "f1"
+
+    metrics_report = json.loads(metrics_report_path.read_text(encoding="utf-8"))
+    assert list(metrics_report["models"]) == ["Logistic Regression", "Random Forest"]
+    assert metrics_report["threshold_selection_metric"] == "f1"
+
+    feature_importance_report = pd.read_csv(feature_importance_report_path)
+    assert not feature_importance_report.empty
+    assert feature_importance_report["model"].eq("Random Forest").all()
+    assert set(feature_importance_report.columns) == {"model", "feature", "importance"}

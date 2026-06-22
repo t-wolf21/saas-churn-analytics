@@ -36,6 +36,14 @@ Current test-set results with model-specific thresholds selected on the validati
 
 The Random Forest currently gives the strongest threshold-based test F1 and precision, while Logistic Regression provides a useful linear baseline with slightly higher ROC AUC.
 
+## Business Interpretation
+
+The Random Forest feature importance report shows that the model relies most on product engagement and account lifecycle signals: usage duration, usage count, usage event count, number of unique features used, total error count, subscription count, tickets per usage, account activity score, account age, and beta feature rate.
+
+In this synthetic dataset, churned accounts show much lower usage volume, feature breadth, subscription count, account age, and activity score than retained accounts. At the same time, `tickets_per_usage` is much higher for churned accounts, which suggests that support friction relative to product usage is more informative than raw ticket volume alone.
+
+For a customer-success workflow, the most actionable signals would be falling product adoption, narrow feature usage, low account activity, and elevated support load per unit of usage. These should be treated as prioritization signals, not causal explanations.
+
 ## Project Structure
 
 ```text
@@ -153,7 +161,7 @@ The main portfolio report is available at:
 notebooks/churn_model_report.ipynb
 ```
 
-It walks through the dataset, exploratory analysis, feature engineering, train/validation/test split, model comparison, confusion matrices, and Random Forest feature importance.
+It walks through the dataset, exploratory analysis, feature engineering, train/validation/test split, model comparison, confusion matrices, Random Forest feature importance, and business interpretation of the strongest churn drivers.
 
 ## Limitations
 
@@ -164,6 +172,5 @@ It walks through the dataset, exploratory analysis, feature engineering, train/v
 
 ## Next Steps
 
-- Add an end-to-end smoke test for the full training pipeline.
-- Add a concise business interpretation of the top churn drivers.
+- Add permutation importance or SHAP to validate whether the top drivers remain stable across explanation methods.
 - Add a small Streamlit dashboard after the notebook and pipeline remain stable.

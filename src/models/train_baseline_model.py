@@ -204,8 +204,11 @@ def _to_jsonable(value):
 
 def write_model_metrics_report(
     model_results: dict[str, dict[str, object]],
-    path: Path = METRICS_REPORT_PATH,
+    path: Path | None = None,
 ) -> None:
+    if path is None:
+        path = METRICS_REPORT_PATH
+
     report = {
         "random_state": RANDOM_STATE,
         "validation_size": VALIDATION_SIZE,
@@ -244,8 +247,11 @@ def extract_feature_importance(model: Pipeline, model_name: str) -> pd.DataFrame
 
 def write_feature_importance_report(
     feature_importance_frames: list[pd.DataFrame],
-    path: Path = FEATURE_IMPORTANCE_REPORT_PATH,
+    path: Path | None = None,
 ) -> None:
+    if path is None:
+        path = FEATURE_IMPORTANCE_REPORT_PATH
+
     if feature_importance_frames:
         report = pd.concat(feature_importance_frames, ignore_index=True)
     else:
